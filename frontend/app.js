@@ -12,6 +12,7 @@ let client = null;
 let activeAccount = null;
 let currentEscrowId = 0;
 let knownEscrowIds = new Set([0]);
+let isMetaMaskConnected = false;
 
 // Initialize when DOM and SDK are ready
 document.addEventListener("DOMContentLoaded", async () => {
@@ -37,6 +38,10 @@ function getOrCreateValidPrivateKey() {
 
 // Ensure active client and account are always ready for write transactions
 function ensureAccountConfigured() {
+  if (isMetaMaskConnected && client && activeAccount) {
+    return activeAccount;
+  }
+
   if (!window.GenLayerSDK) return null;
   const { createClient, createAccount, testnetBradbury } = window.GenLayerSDK;
 
@@ -64,6 +69,20 @@ async function initDefaultClient() {
       return;
     }
 
+    // If MetaMask is already connected, connect via MetaMask provider
+    if (window.ethereum && window.ethereum.selectedAddress) {
+      const userAddr = window.ethereum.selectedAddress;
+      client = window.GenLayerSDK.createClient({
+        chain: window.GenLayerSDK.testnetBradbury,
+        account: userAddr,
+        provider: window.ethereum
+      });
+      activeAccount = { address: userAddr };
+      isMetaMaskConnected = true;
+      updateConnectedUI(userAddr);
+      return;
+    }
+
     ensureAccountConfigured();
     console.log("✅ GenLayer Client Initialized for Bradbury Testnet.");
   } catch (err) {
@@ -84,16 +103,16 @@ async function connectWallet() {
       if (accounts && accounts.length > 0) {
         const userAddr = accounts[0];
         
-        const validKey = getOrCreateValidPrivateKey();
-        activeAccount = createAccount(validKey);
-
         client = createClient({
           chain: testnetBradbury,
-          account: activeAccount
+          account: userAddr,
+          provider: window.ethereum
         });
+        activeAccount = { address: userAddr };
+        isMetaMaskConnected = true;
 
         updateConnectedUI(userAddr);
-        showNotification("Wallet Connected", `Connected to: ${userAddr.substring(0, 6)}...${userAddr.substring(userAddr.length - 4)}`, "success");
+        showNotification("Wallet Connected", `Connected to MetaMask: ${userAddr.substring(0, 6)}...${userAddr.substring(userAddr.length - 4)}`, "success");
         return;
       }
     } catch (err) {
@@ -118,6 +137,7 @@ async function connectWallet() {
       chain: testnetBradbury,
       account: activeAccount
     });
+    isMetaMaskConnected = false;
     updateConnectedUI(activeAccount.address);
     showNotification("Connected", `Active Account: ${activeAccount.address}`, "success");
   } else {
