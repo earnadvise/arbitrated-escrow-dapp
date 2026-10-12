@@ -70,10 +70,18 @@ async function connectWallet() {
       if (accounts && accounts.length > 0) {
         const userAddr = accounts[0];
         
+        let savedKey = localStorage.getItem("genlayer_private_key");
+        if (!savedKey) {
+          const freshAcc = createAccount();
+          savedKey = freshAcc.privateKey;
+          localStorage.setItem("genlayer_private_key", savedKey);
+        }
+        activeAccount = createAccount(savedKey);
+
         client = createClient({
-          chain: testnetBradbury
+          chain: testnetBradbury,
+          account: activeAccount
         });
-        activeAccount = { address: userAddr };
 
         updateConnectedUI(userAddr);
         showNotification("Wallet Connected", `Connected to: ${userAddr.substring(0, 6)}...${userAddr.substring(userAddr.length - 4)}`, "success");
