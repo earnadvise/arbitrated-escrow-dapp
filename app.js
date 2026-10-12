@@ -71,6 +71,7 @@ async function initDefaultClient() {
 
     // If MetaMask is already connected, connect via MetaMask provider
     if (window.ethereum && window.ethereum.selectedAddress) {
+      await switchToBradburyNetwork();
       const userAddr = window.ethereum.selectedAddress;
       client = window.GenLayerSDK.createClient({
         chain: window.GenLayerSDK.testnetBradbury,
@@ -90,6 +91,39 @@ async function initDefaultClient() {
   }
 }
 
+// Auto-switch MetaMask to GenLayer Bradbury Testnet (Chain ID 4221)
+async function switchToBradburyNetwork() {
+  if (!window.ethereum) return;
+  const chainIdHex = "0x107d"; // 4221 in hex
+  try {
+    await window.ethereum.request({
+      method: "wallet_switchEthereumChain",
+      params: [{ chainId: chainIdHex }]
+    });
+  } catch (switchError) {
+    if (switchError.code === 4902 || switchError.message?.includes("unrecognized")) {
+      try {
+        await window.ethereum.request({
+          method: "wallet_addEthereumChain",
+          params: [{
+            chainId: chainIdHex,
+            chainName: "Genlayer Bradbury Testnet",
+            nativeCurrency: {
+              name: "GEN",
+              symbol: "GEN",
+              decimals: 18
+            },
+            rpcUrls: ["https://rpc-bradbury.genlayer.com"],
+            blockExplorerUrls: ["https://explorer-bradbury.genlayer.com"]
+          }]
+        });
+      } catch (addError) {
+        console.error("Failed to add GenLayer network:", addError);
+      }
+    }
+  }
+}
+
 // Connect Wallet Action (MetaMask / Rabby priority)
 async function connectWallet() {
   if (!window.GenLayerSDK) return;
@@ -99,6 +133,7 @@ async function connectWallet() {
   if (window.ethereum) {
     try {
       document.getElementById("walletBtnText").textContent = "Connecting...";
+      await switchToBradburyNetwork();
       const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
       if (accounts && accounts.length > 0) {
         const userAddr = accounts[0];
@@ -112,7 +147,7 @@ async function connectWallet() {
         isMetaMaskConnected = true;
 
         updateConnectedUI(userAddr);
-        showNotification("Wallet Connected", `Connected to MetaMask: ${userAddr.substring(0, 6)}...${userAddr.substring(userAddr.length - 4)}`, "success");
+        showNotification("Wallet Connected", `Connected: ${userAddr.substring(0, 6)}...${userAddr.substring(userAddr.length - 4)} on Bradbury Testnet`, "success");
         return;
       }
     } catch (err) {
@@ -216,7 +251,8 @@ function setupEventListeners() {
     try {
       showTxBanner("Broadcasting create_escrow transaction to GenLayer validators...");
 
-      // 1. Ensure client has account and execute on-chain transaction
+      // 1. Ensure client has account, correct network, and execute on-chain transaction
+      await switchToBradburyNetwork();
       ensureAccountConfigured();
       const txHash = await client.writeContract({
         address: CONTRACT_ADDRESS,
@@ -368,6 +404,7 @@ function setupEventListeners() {
 
 // Generic Contract Write Executor with dynamic ID
 async function executeContractWrite(functionName, args, statusMessage) {
+  await switchToBradburyNetwork();
   ensureAccountConfigured();
   try {
     showTxBanner(statusMessage);
