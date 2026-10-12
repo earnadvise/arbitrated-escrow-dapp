@@ -23,27 +23,37 @@ document.addEventListener("DOMContentLoaded", async () => {
   await queryEscrowOnChain(0);
 });
 
+// Helper to generate or retrieve a valid 32-byte hex private key
+function getOrCreateValidPrivateKey() {
+  let savedKey = localStorage.getItem("genlayer_private_key");
+  if (!savedKey || !/^0x[0-9a-fA-F]{64}$/.test(savedKey.trim())) {
+    const bytes = new Uint8Array(32);
+    (window.crypto || window.msCrypto).getRandomValues(bytes);
+    savedKey = "0x" + Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+    localStorage.setItem("genlayer_private_key", savedKey);
+  }
+  return savedKey.trim();
+}
+
 // Ensure active client and account are always ready for write transactions
 function ensureAccountConfigured() {
   if (!window.GenLayerSDK) return null;
   const { createClient, createAccount, testnetBradbury } = window.GenLayerSDK;
 
-  if (!activeAccount || !activeAccount.address) {
-    let savedKey = localStorage.getItem("genlayer_private_key");
-    if (!savedKey) {
-      const freshAcc = createAccount();
-      savedKey = freshAcc.privateKey;
-      localStorage.setItem("genlayer_private_key", savedKey);
-    }
-    activeAccount = createAccount(savedKey);
-  }
+  try {
+    const validKey = getOrCreateValidPrivateKey();
+    activeAccount = createAccount(validKey);
 
-  client = createClient({
-    chain: testnetBradbury,
-    account: activeAccount
-  });
-  updateConnectedUI(activeAccount.address);
-  return activeAccount;
+    client = createClient({
+      chain: testnetBradbury,
+      account: activeAccount
+    });
+    updateConnectedUI(activeAccount.address);
+    return activeAccount;
+  } catch (err) {
+    console.error("Failed to configure account:", err);
+    return null;
+  }
 }
 
 // Initialize default client
@@ -74,13 +84,8 @@ async function connectWallet() {
       if (accounts && accounts.length > 0) {
         const userAddr = accounts[0];
         
-        let savedKey = localStorage.getItem("genlayer_private_key");
-        if (!savedKey) {
-          const freshAcc = createAccount();
-          savedKey = freshAcc.privateKey;
-          localStorage.setItem("genlayer_private_key", savedKey);
-        }
-        activeAccount = createAccount(savedKey);
+        const validKey = getOrCreateValidPrivateKey();
+        activeAccount = createAccount(validKey);
 
         client = createClient({
           chain: testnetBradbury,
@@ -102,15 +107,13 @@ async function connectWallet() {
   // 2. If no browser wallet extension is installed, offer private key import
   const customKey = prompt("No browser wallet detected. Enter your GenLayer private key to connect (or leave empty to generate a fresh testnet key):");
   if (customKey !== null) {
-    let acc;
-    if (customKey.trim()) {
-      acc = createAccount(customKey.trim());
-      localStorage.setItem("genlayer_private_key", customKey.trim());
+    let keyToUse = customKey.trim();
+    if (!keyToUse) {
+      keyToUse = getOrCreateValidPrivateKey();
     } else {
-      acc = createAccount();
-      localStorage.setItem("genlayer_private_key", acc.privateKey);
+      localStorage.setItem("genlayer_private_key", keyToUse);
     }
-    activeAccount = acc;
+    activeAccount = createAccount(keyToUse);
     client = createClient({
       chain: testnetBradbury,
       account: activeAccount
