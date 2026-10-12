@@ -23,7 +23,30 @@ document.addEventListener("DOMContentLoaded", async () => {
   await queryEscrowOnChain(0);
 });
 
-// Initialize default read client
+// Ensure active client and account are always ready for write transactions
+function ensureAccountConfigured() {
+  if (!window.GenLayerSDK) return null;
+  const { createClient, createAccount, testnetBradbury } = window.GenLayerSDK;
+
+  if (!activeAccount || !activeAccount.address) {
+    let savedKey = localStorage.getItem("genlayer_private_key");
+    if (!savedKey) {
+      const freshAcc = createAccount();
+      savedKey = freshAcc.privateKey;
+      localStorage.setItem("genlayer_private_key", savedKey);
+    }
+    activeAccount = createAccount(savedKey);
+  }
+
+  client = createClient({
+    chain: testnetBradbury,
+    account: activeAccount
+  });
+  updateConnectedUI(activeAccount.address);
+  return activeAccount;
+}
+
+// Initialize default client
 async function initDefaultClient() {
   try {
     if (!window.GenLayerSDK) {
@@ -31,26 +54,7 @@ async function initDefaultClient() {
       return;
     }
 
-    const { createClient, createAccount, testnetBradbury } = window.GenLayerSDK;
-
-    // Check if user previously saved a custom key
-    let savedKey = localStorage.getItem("genlayer_private_key");
-    if (savedKey) {
-      activeAccount = createAccount(savedKey);
-      client = createClient({
-        chain: testnetBradbury,
-        account: activeAccount
-      });
-      updateConnectedUI(activeAccount.address);
-      return;
-    }
-
-    // Default read-only client
-    client = createClient({ chain: testnetBradbury });
-    document.getElementById("lblActiveAccount").textContent = "Not Connected (Click Connect Wallet)";
-    document.getElementById("walletBtnText").textContent = "Connect Wallet";
-    document.getElementById("lblActiveBalance").textContent = "--";
-
+    ensureAccountConfigured();
     console.log("✅ GenLayer Client Initialized for Bradbury Testnet.");
   } catch (err) {
     console.error("Failed to initialize GenLayer client:", err);
@@ -189,7 +193,8 @@ function setupEventListeners() {
     try {
       showTxBanner("Broadcasting create_escrow transaction to GenLayer validators...");
 
-      // 1. Execute on-chain transaction
+      // 1. Ensure client has account and execute on-chain transaction
+      ensureAccountConfigured();
       const txHash = await client.writeContract({
         address: CONTRACT_ADDRESS,
         functionName: "create_escrow",
@@ -340,10 +345,7 @@ function setupEventListeners() {
 
 // Generic Contract Write Executor with dynamic ID
 async function executeContractWrite(functionName, args, statusMessage) {
-  if (!client || !activeAccount) {
-    await connectWallet();
-    if (!activeAccount) return;
-  }
+  ensureAccountConfigured();
   try {
     showTxBanner(statusMessage);
     const txHash = await client.writeContract({
