@@ -251,9 +251,22 @@ function setupEventListeners() {
     try {
       showTxBanner("Broadcasting create_escrow transaction to GenLayer validators...");
 
-      // 1. Ensure client has account, correct network, and execute on-chain transaction
+      // 1. Ensure client has account, correct network, and query next escrow ID deterministically
       await switchToBradburyNetwork();
       ensureAccountConfigured();
+
+      let derivedEscrowId = null;
+      try {
+        const nextIdRaw = await client.readContract({
+          address: CONTRACT_ADDRESS,
+          functionName: "get_next_escrow_id",
+          args: []
+        });
+        derivedEscrowId = Number(nextIdRaw);
+      } catch (readErr) {
+        console.warn("Could not query get_next_escrow_id directly, fallback to current count:", readErr);
+      }
+
       const txHash = await client.writeContract({
         address: CONTRACT_ADDRESS,
         functionName: "create_escrow",
@@ -263,38 +276,30 @@ function setupEventListeners() {
       showTxBanner(`Transaction submitted: ${txHash.substring(0, 16)}... Waiting for GenVM finality...`, txHash);
       const receipt = await client.waitForTransactionReceipt({ hash: txHash });
 
-      // 2. Dynamically resolve the newly created escrow ID by probing sequential indices
-      let capturedEscrowId = null;
-      for (let probeId = 0; probeId < 20; probeId++) {
+      // If derivedEscrowId wasn't known beforehand, query get_next_escrow_id post-tx
+      if (derivedEscrowId === null) {
         try {
-          const rec = await client.readContract({
+          const postNextId = await client.readContract({
             address: CONTRACT_ADDRESS,
-            functionName: "get_escrow",
-            args: [probeId]
+            functionName: "get_next_escrow_id",
+            args: []
           });
-          if (rec && rec.agreement_desc === desc) {
-            capturedEscrowId = probeId;
-          }
+          derivedEscrowId = Number(postNextId) - 1;
         } catch (e) {
-          break;
+          derivedEscrowId = 0;
         }
       }
 
-      if (capturedEscrowId === null) {
-        const maxKnown = Math.max(...Array.from(knownEscrowIds), 0);
-        capturedEscrowId = maxKnown + 1;
-      }
-
-      currentEscrowId = capturedEscrowId;
+      currentEscrowId = derivedEscrowId;
       knownEscrowIds.add(currentEscrowId);
       document.getElementById("lookupEscrowId").value = currentEscrowId;
 
-      showNotification("Escrow Created On-Chain!", `Captured Escrow Identifier: #${currentEscrowId} (Tx: ${txHash.substring(0, 10)}...).`, "success");
+      showNotification("Escrow Created On-Chain!", `Contract-Derived Escrow Identifier: #${currentEscrowId} (Tx: ${txHash.substring(0, 10)}...).`, "success");
       
-      // 3. If user specified initial deposit, deposit into the DYNAMICALLY captured Escrow ID
+      // 2. If user specified initial deposit, deposit directly into the exact contract-derived Escrow ID
       if (BigInt(depositVal) > 0n) {
         btnText.textContent = `Depositing funds into Escrow #${currentEscrowId}...`;
-        showTxBanner(`Depositing ${depositVal} WEI into dynamically captured Escrow #${currentEscrowId}...`);
+        showTxBanner(`Depositing ${depositVal} WEI into deterministic contract-derived Escrow #${currentEscrowId}...`);
         
         const depTx = await client.writeContract({
           address: CONTRACT_ADDRESS,
@@ -306,7 +311,7 @@ function setupEventListeners() {
         showNotification("Deposit Confirmed!", `Funded Escrow #${currentEscrowId} with ${depositVal} WEI.`, "success");
       }
 
-      // 4. Query and render the newly generated Escrow ID
+      // 3. Query and render the deterministic Escrow ID
       document.getElementById("tabManage").click();
       await queryEscrowOnChain(currentEscrowId);
     } catch (err) {
@@ -400,6 +405,18 @@ function setupEventListeners() {
       hideTxBanner();
     }
   });
+
+  // 11. Default / Cancellation Transition (resolve_dispute_default)
+  const btnResolveDefault = document.getElementById("btnResolveDefault");
+  if (btnResolveDefault) {
+    btnResolveDefault.addEventListener("click", async () => {
+      await executeContractWrite(
+        "resolve_dispute_default",
+        [currentEscrowId],
+        `Executing default dispute resolution for Escrow #${currentEscrowId} (unresponsive party)...`
+      );
+    });
+  }
 }
 
 // Generic Contract Write Executor with dynamic ID

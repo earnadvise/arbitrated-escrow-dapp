@@ -282,3 +282,127 @@ def test_escrow_reverts(direct_deploy, direct_vm):
     direct_vm.sender = charlie
     with pytest.raises(Exception):
         escrow_contract.waive_dispute_statement(escrow_id)
+
+
+def test_deterministic_contract_derived_escrow_id(direct_deploy, direct_vm):
+    """
+    Tests that escrow creation and deposit use a deterministic contract-derived escrow ID
+    queried directly via get_next_escrow_id without scanning descriptions or guessing.
+    """
+    escrow_contract = direct_deploy("contracts/ArbitratedEscrow.py")
+    alice = Address("0x0000000000000000000000000000000000000001")
+    bob = Address("0x0000000000000000000000000000000000000002")
+
+    # Predictable contract-derived ID before creation
+    predicted_id_0 = escrow_contract.get_next_escrow_id()
+    assert predicted_id_0 == u256(0)
+
+    direct_vm.sender = alice
+    returned_id_0 = escrow_contract.create_escrow(bob.as_hex, "Deterministic Project Alpha")
+    assert returned_id_0 == predicted_id_0
+
+    # Deterministic deposit into exact derived ID
+    direct_vm.value = u256(1500)
+    escrow_contract.deposit(predicted_id_0)
+    direct_vm.value = u256(0)
+
+    escrow_0 = escrow_contract.get_escrow(predicted_id_0)
+    assert escrow_0.amount == u256(1500)
+    assert escrow_0.status == "ESCROWED"
+
+    # Second escrow deterministic query
+    predicted_id_1 = escrow_contract.get_next_escrow_id()
+    assert predicted_id_1 == u256(1)
+
+    returned_id_1 = escrow_contract.create_escrow(bob.as_hex, "Deterministic Project Beta")
+    assert returned_id_1 == predicted_id_1
+
+    direct_vm.value = u256(3000)
+    escrow_contract.deposit(predicted_id_1)
+    direct_vm.value = u256(0)
+
+    escrow_1 = escrow_contract.get_escrow(predicted_id_1)
+    assert escrow_1.amount == u256(3000)
+    assert escrow_1.status == "ESCROWED"
+
+
+def test_default_dispute_resolution_when_seller_withholds_statement(direct_deploy, direct_vm):
+    """
+    Default / Cancellation Transition:
+    Tests that when a buyer files a dispute and the seller withholds both a statement
+    and waiver, the buyer can trigger resolve_dispute_default to recover 100% of their funds,
+    preventing funds from being locked indefinitely.
+    """
+    escrow_contract = direct_deploy("contracts/ArbitratedEscrow.py")
+    alice = Address("0x0000000000000000000000000000000000000001")
+    bob = Address("0x0000000000000000000000000000000000000002")
+
+    # 1. Create and fund escrow
+    direct_vm.sender = alice
+    escrow_id = escrow_contract.create_escrow(bob.as_hex, "Web application delivery")
+    direct_vm.value = u256(5000)
+    escrow_contract.deposit(escrow_id)
+    direct_vm.value = u256(0)
+
+    # 2. Buyer disputes because seller went silent
+    direct_vm.sender = alice
+    escrow_contract.dispute_escrow(escrow_id, "Seller is completely unresponsive.")
+
+    escrow = escrow_contract.get_escrow(escrow_id)
+    assert escrow.status == "DISPUTED"
+    assert escrow.dispute_buyer_statement == "Seller is completely unresponsive."
+    assert escrow.dispute_seller_statement == ""
+    assert escrow.seller_waived_statement is False
+
+    # 3. Adjudication cannot proceed normally without both statements or waiver
+    with pytest.raises(Exception):
+        escrow_contract.adjudicate_escrow(escrow_id)
+
+    # 4. Buyer triggers resolve_dispute_default to prevent deadlock
+    direct_vm.sender = alice
+    escrow_contract.resolve_dispute_default(escrow_id)
+
+    # 5. Verify funds refunded to buyer and status resolved
+    escrow_resolved = escrow_contract.get_escrow(escrow_id)
+    assert escrow_resolved.status == "RESOLVED"
+    assert escrow_resolved.payout_seller_percent == u256(0)
+    assert escrow_resolved.amount == u256(0)
+    assert "Seller withheld statement" in escrow_resolved.resolution_reason
+
+
+def test_default_dispute_resolution_when_buyer_withholds_statement(direct_deploy, direct_vm):
+    """
+    Default / Cancellation Transition:
+    Tests that when a seller files a dispute and the buyer withholds both a statement
+    and waiver, the seller can trigger resolve_dispute_default to receive 100% payout,
+    preventing malicious buyers from locking seller funds indefinitely.
+    """
+    escrow_contract = direct_deploy("contracts/ArbitratedEscrow.py")
+    alice = Address("0x0000000000000000000000000000000000000001")
+    bob = Address("0x0000000000000000000000000000000000000002")
+
+    # 1. Create, fund, and submit delivery
+    direct_vm.sender = alice
+    escrow_id = escrow_contract.create_escrow(bob.as_hex, "API endpoints")
+    direct_vm.value = u256(4000)
+    escrow_contract.deposit(escrow_id)
+    direct_vm.value = u256(0)
+
+    direct_vm.sender = bob
+    escrow_contract.submit_delivery(escrow_id, "https://github.com/bob/api")
+
+    # 2. Seller disputes because buyer refuses to approve or submit review
+    direct_vm.sender = bob
+    escrow_contract.dispute_escrow(escrow_id, "Work submitted per spec, buyer ghosted.")
+
+    # 3. Seller triggers resolve_dispute_default after buyer withheld statement
+    direct_vm.sender = bob
+    escrow_contract.resolve_dispute_default(escrow_id)
+
+    # 4. Verify funds paid to seller and status resolved
+    escrow_resolved = escrow_contract.get_escrow(escrow_id)
+    assert escrow_resolved.status == "RESOLVED"
+    assert escrow_resolved.payout_seller_percent == u256(100)
+    assert escrow_resolved.amount == u256(0)
+    assert "Buyer withheld statement" in escrow_resolved.resolution_reason
+

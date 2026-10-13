@@ -19,8 +19,10 @@ A decentralized bug bounty and vulnerability verification primitive for Web3 pro
 ### 2. `ArbitratedEscrow.py` & `MilestoneEscrow.py` — Autonomous Milestone Escrow with AI Arbitration ⚖️
 A decentralized commerce and freelance escrow primitive that arbitrates subjective deliverable disputes through multi-validator consensus.
 
+- **Deterministic Contract-Derived Escrow IDs (`get_next_escrow_id`)**: Escrow creation and funding use an on-chain predictable identifier directly from the contract, eliminating description-scanning or guessing.
+- **Deadlock-Proof Default Resolution (`resolve_dispute_default`)**: Prevents either party from locking disputed funds indefinitely by withholding both a statement and waiver. If one party files a dispute and the counterparty refuses to participate or waive, the active party triggers a default resolution (100% refund to buyer or 100% payout to seller).
 - **Phased Tranche Releases**: Supports multi-milestone deliverables with independent funding, reviews, and payouts.
-- **Race-Condition & Front-Running Prevention**: Enforces bilateral statements or explicit waivers (`waive_milestone_dispute`) before adjudication can be triggered.
+- **Race-Condition & Front-Running Prevention**: Enforces bilateral statements or explicit waivers (`waive_dispute_statement`) before adjudication can be triggered.
 - **Live DApp Integration**: Directly integrated with GenLayer Bradbury Testnet (`0x27765327341E605F84493563A03Bf33d71ae0928`).
 
 ---
@@ -44,31 +46,33 @@ graph TD
 
 ## 🧪 Comprehensive Unit Test Suite
 
-All contracts are verified with 14 automated unit tests executing in Direct Mode:
+All contracts are verified with 21 automated unit tests executing in Direct Mode:
 
 ```bash
 pytest
 ```
 
 ```text
-tests/test_arbitrated_escrow.py ......                                   [ 42%]
-tests/test_bounty_oracle.py .....                                        [ 78%]
-tests/test_multi_milestone_escrow.py ...                                 [100%]
+tests/test_arbitrated_escrow.py .........                                [ 42%]
+tests/test_bounty_oracle.py .....                                        [ 66%]
+tests/test_multi_milestone_escrow.py ...                                 [ 80%]
+tests/test_parametric_insurance.py ....                                  [100%]
 
-============================= 14 passed in 0.13s ==============================
+============================= 21 passed in 0.08s ==============================
 ```
 
 ### Test Coverage Breakdown:
-1. **`test_bounty_pool_creation_and_funding`**: Validates pool creation, reward hierarchy assertions, and minimum critical funding deposit.
-2. **`test_valid_critical_vulnerability_triage_and_payout`**: Verifies PoC fetching, AI consensus evaluation, and automatic release of Critical reward + stake refund.
-3. **`test_out_of_scope_report_stake_refund`**: Verifies out-of-scope classification, zero reward, and safe stake refund.
-4. **`test_spam_report_stake_slashed`**: Verifies malicious report detection and stake slashing to sponsor.
-5. **`test_pool_top_up_and_closure`**: Tests additional funding deposits, pool closing, and safe remaining balance withdrawals.
-6. **`test_escrow_happy_path` & Multi-Escrow Tests**: Full coverage for milestone releases, waivers, and dispute splits.
+1. **`test_deterministic_contract_derived_escrow_id`**: Verifies deterministic identifier generation (`get_next_escrow_id`) and sequential deposit routing without description scanning.
+2. **`test_default_dispute_resolution_when_seller_withholds_statement`**: Verifies 100% refund default transition to buyer when seller withholds statement/waiver.
+3. **`test_default_dispute_resolution_when_buyer_withholds_statement`**: Verifies 100% payout default transition to seller when buyer withholds statement/waiver.
+4. **`test_multiple_escrows_creation_and_funding`**: Sequential multi-escrow creation and funding.
+5. **`test_dispute_race_condition_prevented_and_resolved` & `test_dispute_explicit_waiver_path`**: Strict bilateral consensus and explicit waiver flows.
+6. **`test_bounty_oracle.py` & `test_parametric_insurance.py`**: Complete security and insurance oracle coverage.
 
 ---
 
 ## 🔗 Live Deployment & Resources
-- **Repository:** [https://github.com/earnadvise/genlayer-intelligent-escrow](https://github.com/earnadvise/genlayer-intelligent-escrow)
+- **Project DApp Repository:** [https://github.com/earnadvise/arbitrated-escrow-dapp](https://github.com/earnadvise/arbitrated-escrow-dapp)
+- **Intelligent Contract Suite:** [https://github.com/earnadvise/genlayer-intelligent-escrow](https://github.com/earnadvise/genlayer-intelligent-escrow)
 - **Bradbury Contract:** `0x27765327341E605F84493563A03Bf33d71ae0928`
 - **Live DApp:** [https://earnadvise.github.io/genlayer-escrow-dapp](https://earnadvise.github.io/genlayer-escrow-dapp)

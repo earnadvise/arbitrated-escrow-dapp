@@ -205,7 +205,9 @@
             <i data-lucide="code-2" class="w-4 h-4 text-indigo-400"></i>
             <span>Contract ABI Signatures</span>
           </h3>
-          <div class="space-y-2.5 text-xs font-mono">
+            <div class="p-2 rounded bg-slate-900/80 border border-slate-800 text-teal-300">
+              get_next_escrow_id() -> u256
+            </div>
             <div class="p-2 rounded bg-slate-900/80 border border-slate-800 text-teal-300">
               create_escrow(seller_address, agreement_desc) -> u256
             </div>
@@ -217,6 +219,9 @@
             </div>
             <div class="p-2 rounded bg-slate-900/80 border border-slate-800 text-teal-300">
               adjudicate_escrow(escrow_id) -> None
+            </div>
+            <div class="p-2 rounded bg-slate-900/80 border border-slate-800 text-amber-300">
+              resolve_dispute_default(escrow_id) -> None
             </div>
           </div>
         </div>
@@ -368,6 +373,24 @@
               <span id="btnRunAdjudicationText">Execute Adjudication On-Chain</span>
             </button>
           </div>
+
+          <!-- Default / Cancellation Transition (Deadlock Prevention) -->
+          <div class="pt-4 border-t border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <div class="flex items-center gap-2">
+                <i data-lucide="shield-alert" class="w-4 h-4 text-amber-400"></i>
+                <span class="text-xs font-bold text-amber-300 uppercase tracking-wider">Deadlock Prevention · Default Resolution</span>
+              </div>
+              <p class="text-[11px] text-slate-400 mt-0.5">
+                If the counterparty withholds both their statement and waiver, the participating party can trigger <code class="text-teal-400">resolve_dispute_default</code> to release 100% of the funds, preventing indefinite fund lock.
+              </p>
+            </div>
+            <button id="btnResolveDefault" class="px-5 py-2.5 rounded-xl bg-amber-600/90 hover:bg-amber-500 text-white font-semibold text-xs transition shrink-0 cursor-pointer flex items-center gap-1.5 shadow-md shadow-amber-600/20">
+              <i data-lucide="unlock" class="w-3.5 h-3.5"></i>
+              <span id="btnResolveDefaultText">Claim Default Resolution</span>
+            </button>
+          </div>
+        </div>
         </div>
 
         <!-- Consensus Verdict Card -->

@@ -16,6 +16,7 @@ class EscrowRecord:
     status: str  # "AWAITING_DEPOSIT" | "ESCROWED" | "DELIVERED" | "DISPUTED" | "RESOLVED" | "REFUNDED"
     agreement_desc: str
     delivery_artifact: str
+    dispute_initiator: Address
     dispute_buyer_statement: str
     dispute_seller_statement: str
     buyer_waived_statement: bool
@@ -55,6 +56,7 @@ class ArbitratedEscrow(gl.Contract):
             status="AWAITING_DEPOSIT",
             agreement_desc=agreement_desc,
             delivery_artifact="",
+            dispute_initiator=Address("0x0000000000000000000000000000000000000000"),
             dispute_buyer_statement="",
             dispute_seller_statement="",
             buyer_waived_statement=False,
@@ -191,7 +193,10 @@ class ArbitratedEscrow(gl.Contract):
             escrow.dispute_seller_statement = statement
             escrow.seller_waived_statement = False
 
-        escrow.status = "DISPUTED"
+        if escrow.status != "DISPUTED":
+            escrow.dispute_initiator = sender
+            escrow.status = "DISPUTED"
+
         self.escrows[escrow_id] = escrow
 
     @gl.public.write
@@ -216,6 +221,61 @@ class ArbitratedEscrow(gl.Contract):
             escrow.buyer_waived_statement = True
         else:
             escrow.seller_waived_statement = True
+
+        self.escrows[escrow_id] = escrow
+
+    @gl.public.write
+    def resolve_dispute_default(self, escrow_id: u256) -> None:
+        """
+        Default / Cancellation Transition:
+        Prevents either party from locking disputed funds indefinitely by withholding both a statement and waiver.
+        If one party filed a dispute statement and the counterparty withholds both their statement and waiver,
+        the active responding party can trigger a default resolution:
+        - If Buyer disputed and Seller went unresponsive: 100% refund to Buyer.
+        - If Seller disputed and Buyer went unresponsive: 100% payout to Seller.
+        """
+        if escrow_id not in self.escrows:
+            raise gl.vm.UserError("Escrow not found")
+
+        escrow = self.escrows[escrow_id]
+        sender = gl.message.sender_address
+
+        if sender != escrow.buyer and sender != escrow.seller:
+            raise gl.vm.UserError("Only buyer or seller can trigger default dispute resolution")
+
+        if escrow.status != "DISPUTED":
+            raise gl.vm.UserError("Escrow must be in DISPUTED status for default resolution")
+
+        buyer_participated = bool(escrow.dispute_buyer_statement.strip()) or escrow.buyer_waived_statement
+        seller_participated = bool(escrow.dispute_seller_statement.strip()) or escrow.seller_waived_statement
+
+        if buyer_participated and seller_participated:
+            raise gl.vm.UserError("Both parties participated; use adjudicate_escrow instead")
+
+        if not buyer_participated and not seller_participated:
+            raise gl.vm.UserError("Neither party has submitted a dispute statement")
+
+        total_amount = escrow.amount
+
+        if buyer_participated and not seller_participated:
+            if sender != escrow.buyer:
+                raise gl.vm.UserError("Only participating buyer can claim default resolution")
+            if total_amount > u256(0):
+                _Recipient(escrow.buyer).emit_transfer(value=total_amount)
+            escrow.status = "RESOLVED"
+            escrow.payout_seller_percent = u256(0)
+            escrow.resolution_reason = "Default resolution: Seller withheld statement and waiver"
+            escrow.amount = u256(0)
+
+        elif seller_participated and not buyer_participated:
+            if sender != escrow.seller:
+                raise gl.vm.UserError("Only participating seller can claim default resolution")
+            if total_amount > u256(0):
+                _Recipient(escrow.seller).emit_transfer(value=total_amount)
+            escrow.status = "RESOLVED"
+            escrow.payout_seller_percent = u256(100)
+            escrow.resolution_reason = "Default resolution: Buyer withheld statement and waiver"
+            escrow.amount = u256(0)
 
         self.escrows[escrow_id] = escrow
 
@@ -332,3 +392,11 @@ class ArbitratedEscrow(gl.Contract):
         if escrow_id not in self.escrows:
             raise gl.vm.UserError("Escrow not found")
         return self.escrows[escrow_id]
+
+    @gl.public.view
+    def get_next_escrow_id(self) -> u256:
+        """
+        Returns the next sequential escrow identifier that will be assigned.
+        Enables clients to deterministically query and know the exact contract-derived escrow ID.
+        """
+        return self.next_escrow_id
