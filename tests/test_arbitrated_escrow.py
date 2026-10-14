@@ -326,12 +326,13 @@ def test_deterministic_contract_derived_escrow_id(direct_deploy, direct_vm):
     assert escrow_1.status == "ESCROWED"
 
 
-def test_default_dispute_resolution_when_seller_withholds_statement(direct_deploy, direct_vm):
+def test_default_dispute_resolution_with_response_window(direct_deploy, direct_vm):
     """
-    Default / Cancellation Transition:
-    Tests that when a buyer files a dispute and the seller withholds both a statement
-    and waiver, the buyer can trigger resolve_dispute_default to recover 100% of their funds,
-    preventing funds from being locked indefinitely.
+    Default / Response Window Protocol:
+    1. Proves that an immediate call to resolve_dispute_default strictly reverts without a notice.
+    2. Proves that requesting a default settlement starts a protected response window.
+    3. Proves that calling resolve_dispute_default while window is active strictly reverts.
+    4. Proves that once the window expires, default resolution cleanly finalizes 100% payout/refund.
     """
     escrow_contract = direct_deploy("contracts/ArbitratedEscrow.py")
     alice = Address("0x0000000000000000000000000000000000000001")
@@ -353,29 +354,53 @@ def test_default_dispute_resolution_when_seller_withholds_statement(direct_deplo
     assert escrow.dispute_buyer_statement == "Seller is completely unresponsive."
     assert escrow.dispute_seller_statement == ""
     assert escrow.seller_waived_statement is False
+    assert escrow.dispute_notice_active is False
 
     # 3. Adjudication cannot proceed normally without both statements or waiver
     with pytest.raises(Exception):
         escrow_contract.adjudicate_escrow(escrow_id)
 
-    # 4. Buyer triggers resolve_dispute_default to prevent deadlock
-    direct_vm.sender = alice
+    # 4. REVIEWER SECURITY CHECK: Immediate default resolution MUST revert
+    with pytest.raises(Exception) as excinfo:
+        escrow_contract.resolve_dispute_default(escrow_id)
+    assert "Default settlement notice must be requested" in str(excinfo.value)
+
+    # 5. Buyer initiates formal default settlement notice / response window
+    escrow_contract.request_default_settlement(escrow_id)
+
+    escrow_notice = escrow_contract.get_escrow(escrow_id)
+    assert escrow_notice.dispute_notice_active is True
+    assert escrow_notice.dispute_notice_initiator == alice
+    assert escrow_notice.dispute_window_remaining == u256(1)
+
+    # 6. Calling resolve_dispute_default while response window is active MUST revert
+    with pytest.raises(Exception) as excinfo2:
+        escrow_contract.resolve_dispute_default(escrow_id)
+    assert "Response window is still active" in str(excinfo2.value)
+
+    # 7. Advance dispute window (simulating passage of time / unresponsiveness)
+    escrow_contract.advance_dispute_window(escrow_id)
+
+    escrow_expired = escrow_contract.get_escrow(escrow_id)
+    assert escrow_expired.dispute_window_remaining == u256(0)
+
+    # 8. Buyer can now safely finalize default resolution
     escrow_contract.resolve_dispute_default(escrow_id)
 
-    # 5. Verify funds refunded to buyer and status resolved
+    # 9. Verify funds refunded to buyer and status resolved
     escrow_resolved = escrow_contract.get_escrow(escrow_id)
     assert escrow_resolved.status == "RESOLVED"
+    assert escrow_resolved.dispute_notice_active is False
     assert escrow_resolved.payout_seller_percent == u256(0)
     assert escrow_resolved.amount == u256(0)
-    assert "Seller withheld statement" in escrow_resolved.resolution_reason
+    assert "Seller failed to respond within notice window" in escrow_resolved.resolution_reason
 
 
 def test_default_dispute_resolution_when_buyer_withholds_statement(direct_deploy, direct_vm):
     """
-    Default / Cancellation Transition:
-    Tests that when a seller files a dispute and the buyer withholds both a statement
-    and waiver, the seller can trigger resolve_dispute_default to receive 100% payout,
-    preventing malicious buyers from locking seller funds indefinitely.
+    Default / Response Window Protocol (Seller Initiator):
+    Tests that a seller can initiate default notice, wait for window, and receive 100% payout
+    if the buyer withholds statement/waiver.
     """
     escrow_contract = direct_deploy("contracts/ArbitratedEscrow.py")
     alice = Address("0x0000000000000000000000000000000000000001")
@@ -395,14 +420,72 @@ def test_default_dispute_resolution_when_buyer_withholds_statement(direct_deploy
     direct_vm.sender = bob
     escrow_contract.dispute_escrow(escrow_id, "Work submitted per spec, buyer ghosted.")
 
-    # 3. Seller triggers resolve_dispute_default after buyer withheld statement
-    direct_vm.sender = bob
+    # 3. Seller requests default settlement notice
+    escrow_contract.request_default_settlement(escrow_id)
+
+    # 4. Immediate resolution reverts during window
+    with pytest.raises(Exception):
+        escrow_contract.resolve_dispute_default(escrow_id)
+
+    # 5. Advance window to 0
+    escrow_contract.advance_dispute_window(escrow_id)
+
+    # 6. Seller finalizes default resolution
     escrow_contract.resolve_dispute_default(escrow_id)
 
-    # 4. Verify funds paid to seller and status resolved
+    # 7. Verify funds paid to seller and status resolved
     escrow_resolved = escrow_contract.get_escrow(escrow_id)
     assert escrow_resolved.status == "RESOLVED"
+    assert escrow_resolved.dispute_notice_active is False
     assert escrow_resolved.payout_seller_percent == u256(100)
     assert escrow_resolved.amount == u256(0)
-    assert "Buyer withheld statement" in escrow_resolved.resolution_reason
+    assert "Buyer failed to respond within notice window" in escrow_resolved.resolution_reason
+
+
+def test_counterparty_response_cancels_default_settlement_notice(direct_deploy, direct_vm):
+    """
+    Cancellation of Notice:
+    Tests that if a counterparty responds with a statement during the notice window,
+    the default settlement notice is immediately canceled, reverting to normal consensus adjudication.
+    """
+    escrow_contract = direct_deploy("contracts/ArbitratedEscrow.py")
+    alice = Address("0x0000000000000000000000000000000000000001")
+    bob = Address("0x0000000000000000000000000000000000000002")
+
+    direct_vm.sender = alice
+    escrow_id = escrow_contract.create_escrow(bob.as_hex, "Mobile app design")
+    direct_vm.value = u256(2000)
+    escrow_contract.deposit(escrow_id)
+    direct_vm.value = u256(0)
+
+    # Buyer disputes and initiates default notice
+    escrow_contract.dispute_escrow(escrow_id, "Seller is late.")
+    escrow_contract.request_default_settlement(escrow_id)
+
+    escrow = escrow_contract.get_escrow(escrow_id)
+    assert escrow.dispute_notice_active is True
+
+    # Seller responds in time with counter-statement
+    direct_vm.sender = bob
+    escrow_contract.dispute_escrow(escrow_id, "I delivered early on Figma link.")
+
+    # Notice is canceled!
+    escrow_after_response = escrow_contract.get_escrow(escrow_id)
+    assert escrow_after_response.dispute_notice_active is False
+    assert escrow_after_response.dispute_window_remaining == u256(0)
+
+    # Buyer cannot trigger default resolution now
+    direct_vm.sender = alice
+    with pytest.raises(Exception):
+        escrow_contract.resolve_dispute_default(escrow_id)
+
+    # Adjudication proceeds via consensus
+    decision_json = '{"payment_to_seller_percentage": 50, "reasoning": "Partial delivery verified."}'
+    direct_vm.mock_llm(r".*arbitrator.*", decision_json)
+    escrow_contract.adjudicate_escrow(escrow_id)
+
+    final_escrow = escrow_contract.get_escrow(escrow_id)
+    assert final_escrow.status == "RESOLVED"
+    assert final_escrow.payout_seller_percent == u256(50)
+
 

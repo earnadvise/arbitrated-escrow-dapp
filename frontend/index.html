@@ -221,6 +221,12 @@
               adjudicate_escrow(escrow_id) -> None
             </div>
             <div class="p-2 rounded bg-slate-900/80 border border-slate-800 text-amber-300">
+              request_default_settlement(escrow_id) -> None
+            </div>
+            <div class="p-2 rounded bg-slate-900/80 border border-slate-800 text-amber-300">
+              advance_dispute_window(escrow_id) -> None
+            </div>
+            <div class="p-2 rounded bg-slate-900/80 border border-slate-800 text-amber-300">
               resolve_dispute_default(escrow_id) -> None
             </div>
           </div>
@@ -374,21 +380,31 @@
             </button>
           </div>
 
-          <!-- Default / Cancellation Transition (Deadlock Prevention) -->
+          <!-- Default / Response Window Protocol (Deadlock Prevention) -->
           <div class="pt-4 border-t border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <div class="flex items-center gap-2">
                 <i data-lucide="shield-alert" class="w-4 h-4 text-amber-400"></i>
-                <span class="text-xs font-bold text-amber-300 uppercase tracking-wider">Deadlock Prevention · Default Resolution</span>
+                <span class="text-xs font-bold text-amber-300 uppercase tracking-wider">Deadlock Prevention · Response Window Protocol</span>
               </div>
               <p class="text-[11px] text-slate-400 mt-0.5">
-                If the counterparty withholds both their statement and waiver, the participating party can trigger <code class="text-teal-400">resolve_dispute_default</code> to release 100% of the funds, preventing indefinite fund lock.
+                Prevents premature payouts: The participating party initiates a notice window (<code class="text-amber-300">request_default_settlement</code>). If counterparty fails to respond during the protected window, <code class="text-amber-300">resolve_dispute_default</code> can then be safely finalized.
               </p>
             </div>
-            <button id="btnResolveDefault" class="px-5 py-2.5 rounded-xl bg-amber-600/90 hover:bg-amber-500 text-white font-semibold text-xs transition shrink-0 cursor-pointer flex items-center gap-1.5 shadow-md shadow-amber-600/20">
-              <i data-lucide="unlock" class="w-3.5 h-3.5"></i>
-              <span id="btnResolveDefaultText">Claim Default Resolution</span>
-            </button>
+            <div class="flex items-center gap-2 shrink-0 flex-wrap">
+              <button id="btnRequestDefault" class="px-3.5 py-2 rounded-xl bg-amber-700/80 hover:bg-amber-600 text-white font-semibold text-xs transition cursor-pointer flex items-center gap-1.5 shadow-md shadow-amber-700/20">
+                <i data-lucide="clock" class="w-3.5 h-3.5"></i>
+                <span id="btnRequestDefaultText">1. Initiate Notice</span>
+              </button>
+              <button id="btnAdvanceWindow" class="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs transition cursor-pointer flex items-center gap-1 border border-slate-700">
+                <i data-lucide="fast-forward" class="w-3.5 h-3.5"></i>
+                <span>Advance</span>
+              </button>
+              <button id="btnResolveDefault" class="px-3.5 py-2 rounded-xl bg-amber-600/90 hover:bg-amber-500 text-white font-semibold text-xs transition cursor-pointer flex items-center gap-1.5 shadow-md shadow-amber-600/20">
+                <i data-lucide="unlock" class="w-3.5 h-3.5"></i>
+                <span id="btnResolveDefaultText">2. Finalize Default</span>
+              </button>
+            </div>
           </div>
         </div>
         </div>

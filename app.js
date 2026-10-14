@@ -406,14 +406,38 @@ function setupEventListeners() {
     }
   });
 
-  // 11. Default / Cancellation Transition (resolve_dispute_default)
+  // 11. Default Settlement Notice (request_default_settlement)
+  const btnRequestDefault = document.getElementById("btnRequestDefault");
+  if (btnRequestDefault) {
+    btnRequestDefault.addEventListener("click", async () => {
+      await executeContractWrite(
+        "request_default_settlement",
+        [currentEscrowId],
+        `Initiating protected default settlement response window for Escrow #${currentEscrowId}...`
+      );
+    });
+  }
+
+  // 12. Advance Window (advance_dispute_window)
+  const btnAdvanceWindow = document.getElementById("btnAdvanceWindow");
+  if (btnAdvanceWindow) {
+    btnAdvanceWindow.addEventListener("click", async () => {
+      await executeContractWrite(
+        "advance_dispute_window",
+        [currentEscrowId],
+        `Advancing dispute response window for Escrow #${currentEscrowId}...`
+      );
+    });
+  }
+
+  // 13. Default Resolution Finalization (resolve_dispute_default)
   const btnResolveDefault = document.getElementById("btnResolveDefault");
   if (btnResolveDefault) {
     btnResolveDefault.addEventListener("click", async () => {
       await executeContractWrite(
         "resolve_dispute_default",
         [currentEscrowId],
-        `Executing default dispute resolution for Escrow #${currentEscrowId} (unresponsive party)...`
+        `Finalizing default dispute resolution for Escrow #${currentEscrowId} (unresponsive party)...`
       );
     });
   }

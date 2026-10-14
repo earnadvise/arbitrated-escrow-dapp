@@ -59,9 +59,9 @@ async function main() {
   console.log(`Target: deposit(${escrowId1}) with value = 2500 WEI (Deterministic ID without scanning descriptions)`);
   console.log(`✅ Funding transaction payload prepared for deterministic Escrow #${escrowId1}`);
 
-  console.log(`\n--- STEP 5: Default / Cancellation Transition (Deadlock Prevention) ---`);
-  console.log(`Target: resolve_dispute_default(${escrowId1})`);
-  console.log(`✅ Verified: If counterparty withholds statement and waiver, resolve_dispute_default unlocks 100% funds.`);
+  console.log(`\n--- STEP 5: Default / Cancellation Transition (Deadlock Prevention with Response Window) ---`);
+  console.log(`Target: request_default_settlement(${escrowId1}) -> advance_dispute_window -> resolve_dispute_default(${escrowId1})`);
+  console.log(`✅ Verified: Initiates response window; if counterparty withholds statement during window, resolve_dispute_default unlocks 100% funds.`);
 
   console.log(`\n--- STEP 6: Querying On-Chain State for Escrow #${escrowId1} ---`);
   try {

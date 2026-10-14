@@ -20,7 +20,7 @@ A decentralized bug bounty and vulnerability verification primitive for Web3 pro
 A decentralized commerce and freelance escrow primitive that arbitrates subjective deliverable disputes through multi-validator consensus.
 
 - **Deterministic Contract-Derived Escrow IDs (`get_next_escrow_id`)**: Escrow creation and funding use an on-chain predictable identifier directly from the contract, eliminating description-scanning or guessing.
-- **Deadlock-Proof Default Resolution (`resolve_dispute_default`)**: Prevents either party from locking disputed funds indefinitely by withholding both a statement and waiver. If one party files a dispute and the counterparty refuses to participate or waive, the active party triggers a default resolution (100% refund to buyer or 100% payout to seller).
+- **Deadlock-Proof Default Resolution with Protected Response Window (`request_default_settlement` -> `resolve_dispute_default`)**: Prevents either party from locking disputed funds indefinitely while guaranteeing the counterparty a challenge/response window before funds can be released. Immediate calls strictly revert. If the counterparty responds, the default notice is canceled; if they remain unresponsive after the window expires, 100% default payout/refund is finalized.
 - **Phased Tranche Releases**: Supports multi-milestone deliverables with independent funding, reviews, and payouts.
 - **Race-Condition & Front-Running Prevention**: Enforces bilateral statements or explicit waivers (`waive_dispute_statement`) before adjudication can be triggered.
 - **Live DApp Integration**: Directly integrated with GenLayer Bradbury Testnet (`0x27765327341E605F84493563A03Bf33d71ae0928`).
@@ -46,7 +46,7 @@ graph TD
 
 ## 🧪 Comprehensive Unit Test Suite
 
-All contracts are verified with 21 automated unit tests executing in Direct Mode:
+All contracts are verified with 22 automated unit tests executing in Direct Mode:
 
 ```bash
 pytest

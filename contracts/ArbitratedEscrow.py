@@ -21,6 +21,9 @@ class EscrowRecord:
     dispute_seller_statement: str
     buyer_waived_statement: bool
     seller_waived_statement: bool
+    dispute_notice_active: bool
+    dispute_notice_initiator: Address
+    dispute_window_remaining: u256
     resolution_reason: str
     payout_seller_percent: u256
 
@@ -61,6 +64,9 @@ class ArbitratedEscrow(gl.Contract):
             dispute_seller_statement="",
             buyer_waived_statement=False,
             seller_waived_statement=False,
+            dispute_notice_active=False,
+            dispute_notice_initiator=Address("0x0000000000000000000000000000000000000000"),
+            dispute_window_remaining=u256(0),
             resolution_reason="",
             payout_seller_percent=u256(0)
         )
@@ -197,6 +203,11 @@ class ArbitratedEscrow(gl.Contract):
             escrow.dispute_initiator = sender
             escrow.status = "DISPUTED"
 
+        # If counterparty submits a statement, cancel any pending default resolution notice
+        if escrow.dispute_notice_active:
+            escrow.dispute_notice_active = False
+            escrow.dispute_window_remaining = u256(0)
+
         self.escrows[escrow_id] = escrow
 
     @gl.public.write
@@ -222,17 +233,82 @@ class ArbitratedEscrow(gl.Contract):
         else:
             escrow.seller_waived_statement = True
 
+        # If counterparty waives statement, cancel any pending default resolution notice
+        if escrow.dispute_notice_active:
+            escrow.dispute_notice_active = False
+            escrow.dispute_window_remaining = u256(0)
+
+        self.escrows[escrow_id] = escrow
+
+    @gl.public.write
+    def request_default_settlement(self, escrow_id: u256) -> None:
+        """
+        Initiates a formal response window / notice period for default dispute settlement.
+        Can only be called by a party who has submitted a statement/waiver when the counterparty
+        has not yet responded. The counterparty is given a protected response window.
+        """
+        if escrow_id not in self.escrows:
+            raise gl.vm.UserError("Escrow not found")
+
+        escrow = self.escrows[escrow_id]
+        sender = gl.message.sender_address
+
+        if sender != escrow.buyer and sender != escrow.seller:
+            raise gl.vm.UserError("Only buyer or seller can request default settlement")
+
+        if escrow.status != "DISPUTED":
+            raise gl.vm.UserError("Escrow must be in DISPUTED status for default settlement notice")
+
+        buyer_participated = bool(escrow.dispute_buyer_statement.strip()) or escrow.buyer_waived_statement
+        seller_participated = bool(escrow.dispute_seller_statement.strip()) or escrow.seller_waived_statement
+
+        if buyer_participated and seller_participated:
+            raise gl.vm.UserError("Both parties participated; proceed to adjudication")
+
+        if sender == escrow.buyer and not buyer_participated:
+            raise gl.vm.UserError("Buyer must submit a statement before requesting default settlement")
+
+        if sender == escrow.seller and not seller_participated:
+            raise gl.vm.UserError("Seller must submit a statement before requesting default settlement")
+
+        if escrow.dispute_notice_active:
+            raise gl.vm.UserError("Default settlement notice is already active")
+
+        escrow.dispute_notice_active = True
+        escrow.dispute_notice_initiator = sender
+        # Response window: 1 window round required before finalization
+        escrow.dispute_window_remaining = u256(1)
+        self.escrows[escrow_id] = escrow
+
+    @gl.public.write
+    def advance_dispute_window(self, escrow_id: u256) -> None:
+        """
+        Advances the response window timer/counter after the counterparty fails to respond.
+        Once the window reaches 0, resolve_dispute_default can be safely finalized.
+        """
+        if escrow_id not in self.escrows:
+            raise gl.vm.UserError("Escrow not found")
+
+        escrow = self.escrows[escrow_id]
+
+        if not escrow.dispute_notice_active:
+            raise gl.vm.UserError("No active default settlement notice to advance")
+
+        if escrow.dispute_window_remaining > u256(0):
+            escrow.dispute_window_remaining = escrow.dispute_window_remaining - u256(1)
+
         self.escrows[escrow_id] = escrow
 
     @gl.public.write
     def resolve_dispute_default(self, escrow_id: u256) -> None:
         """
-        Default / Cancellation Transition:
-        Prevents either party from locking disputed funds indefinitely by withholding both a statement and waiver.
-        If one party filed a dispute statement and the counterparty withholds both their statement and waiver,
-        the active responding party can trigger a default resolution:
-        - If Buyer disputed and Seller went unresponsive: 100% refund to Buyer.
-        - If Seller disputed and Buyer went unresponsive: 100% payout to Seller.
+        Default Resolution Finalization:
+        Enforces that default resolution CANNOT be called immediately.
+        Requires:
+        1. A default settlement notice was initiated (dispute_notice_active == True).
+        2. The response window has elapsed (dispute_window_remaining == 0).
+        3. The counterparty still failed to submit a statement or waiver during the window.
+        4. Called only by the initiator of the notice.
         """
         if escrow_id not in self.escrows:
             raise gl.vm.UserError("Escrow not found")
@@ -245,6 +321,15 @@ class ArbitratedEscrow(gl.Contract):
 
         if escrow.status != "DISPUTED":
             raise gl.vm.UserError("Escrow must be in DISPUTED status for default resolution")
+
+        if not escrow.dispute_notice_active:
+            raise gl.vm.UserError("Default settlement notice must be requested before default resolution")
+
+        if sender != escrow.dispute_notice_initiator:
+            raise gl.vm.UserError("Only the party who requested default settlement notice can finalize it")
+
+        if escrow.dispute_window_remaining > u256(0):
+            raise gl.vm.UserError("Response window is still active: counterparty must be given time to respond")
 
         buyer_participated = bool(escrow.dispute_buyer_statement.strip()) or escrow.buyer_waived_statement
         seller_participated = bool(escrow.dispute_seller_statement.strip()) or escrow.seller_waived_statement
@@ -263,8 +348,9 @@ class ArbitratedEscrow(gl.Contract):
             if total_amount > u256(0):
                 _Recipient(escrow.buyer).emit_transfer(value=total_amount)
             escrow.status = "RESOLVED"
+            escrow.dispute_notice_active = False
             escrow.payout_seller_percent = u256(0)
-            escrow.resolution_reason = "Default resolution: Seller withheld statement and waiver"
+            escrow.resolution_reason = "Default resolution: Seller failed to respond within notice window"
             escrow.amount = u256(0)
 
         elif seller_participated and not buyer_participated:
@@ -273,8 +359,9 @@ class ArbitratedEscrow(gl.Contract):
             if total_amount > u256(0):
                 _Recipient(escrow.seller).emit_transfer(value=total_amount)
             escrow.status = "RESOLVED"
+            escrow.dispute_notice_active = False
             escrow.payout_seller_percent = u256(100)
-            escrow.resolution_reason = "Default resolution: Buyer withheld statement and waiver"
+            escrow.resolution_reason = "Default resolution: Buyer failed to respond within notice window"
             escrow.amount = u256(0)
 
         self.escrows[escrow_id] = escrow
