@@ -404,39 +404,40 @@ class ArbitratedEscrow(gl.Contract):
         )
 
         def resolve_dispute() -> str:
-            # We can attempt to render the artifact if it's a URL
+            # Render artifact with bounded payload size to ensure fast validator completion and prevent timeouts
             web_content = ""
             if artifact.startswith("http://") or artifact.startswith("https://"):
                 try:
-                    web_content = gl.nondet.web.render(artifact, mode="text")
+                    raw_content = gl.nondet.web.render(artifact, mode="text")
+                    web_content = raw_content[:1500] if raw_content else ""
                 except Exception as e:
-                    web_content = f"Error loading artifact webpage: {str(e)}"
+                    web_content = f"Error loading artifact: {str(e)[:150]}"
 
             task = f"""
-            You are an independent, neutral decentralized arbitrator. Review the original contract agreement, the seller's submitted delivery artifact (and web content if retrieved), and the statements from both the buyer and seller regarding the dispute.
+            You are an independent, neutral decentralized arbitrator. Review the contract agreement, seller delivery artifact, and dispute statements.
             
             CONTRACT AGREEMENT:
-            {agreement}
+            {agreement[:500]}
             
             DELIVERY ARTIFACT SUBMITTED BY SELLER:
-            {artifact}
+            {artifact[:300]}
             
             WEB CONTENT OF ARTIFACT (IF APPLICABLE):
             {web_content}
             
             BUYER STATEMENT:
-            {buyer_stmt}
+            {buyer_stmt[:500]}
             
             SELLER STATEMENT:
-            {seller_stmt}
+            {seller_stmt[:500]}
             
             Determine who is in the right and allocate the percentage of funds (from 0 to 100) to be paid to the Seller, with the remainder refunded to the Buyer.
             Format the output strictly as a JSON object:
             {{
                 "payment_to_seller_percentage": int, // Integer from 0 to 100
-                "reasoning": str // Detailed reasoning for your decision
+                "reasoning": str // Concise reasoning under 200 characters
             }}
-            It is mandatory that you respond only using the JSON format above. Don't include any other words or characters, your output must be only JSON without any formatting prefix or suffix.
+            It is mandatory that you respond only using the JSON format above without markdown formatting.
             """
             result = gl.nondet.exec_prompt(task, response_format="json")
             return json.dumps(result, sort_keys=True)
