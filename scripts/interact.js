@@ -5,7 +5,7 @@
 
 const { createClient } = require("genlayer-js");
 
-const CONTRACT_ADDRESS = "0x27765327341E605F84493563A03Bf33d71ae0928";
+const CONTRACT_ADDRESS = "0x92Fd227790835A5B9F2c8681B21c19Ab4db61D5a";
 const BRADBURY_RPC = "https://rpc-bradbury.genlayer.com";
 
 async function main() {

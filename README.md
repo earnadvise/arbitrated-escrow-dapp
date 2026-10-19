@@ -23,7 +23,7 @@ A decentralized commerce and freelance escrow primitive that arbitrates subjecti
 - **Deadlock-Proof Default Resolution with Protected Response Window (`request_default_settlement` -> `resolve_dispute_default`)**: Prevents either party from locking disputed funds indefinitely while guaranteeing the counterparty a challenge/response window before funds can be released. Immediate calls strictly revert. If the counterparty responds, the default notice is canceled; if they remain unresponsive after the window expires, 100% default payout/refund is finalized.
 - **Phased Tranche Releases**: Supports multi-milestone deliverables with independent funding, reviews, and payouts.
 - **Race-Condition & Front-Running Prevention**: Enforces bilateral statements or explicit waivers (`waive_dispute_statement`) before adjudication can be triggered.
-- **Live DApp Integration**: Directly integrated with GenLayer Bradbury Testnet (`0x27765327341E605F84493563A03Bf33d71ae0928`).
+- **Live DApp Integration**: Directly integrated with GenLayer Bradbury Testnet (`0x92Fd227790835A5B9F2c8681B21c19Ab4db61D5a`).
 
 ---
 
@@ -74,5 +74,5 @@ tests/test_parametric_insurance.py ....                                  [100%]
 ## 🔗 Live Deployment & Resources
 - **Project DApp Repository:** [https://github.com/earnadvise/arbitrated-escrow-dapp](https://github.com/earnadvise/arbitrated-escrow-dapp)
 - **Intelligent Contract Suite:** [https://github.com/earnadvise/genlayer-intelligent-escrow](https://github.com/earnadvise/genlayer-intelligent-escrow)
-- **Bradbury Contract:** `0x27765327341E605F84493563A03Bf33d71ae0928`
+- **Bradbury Contract:** `0x92Fd227790835A5B9F2c8681B21c19Ab4db61D5a`
 - **Live DApp:** [https://earnadvise.github.io/genlayer-escrow-dapp](https://earnadvise.github.io/genlayer-escrow-dapp)
