@@ -332,6 +332,17 @@ function setupEventListeners() {
     await queryEscrowOnChain(currentEscrowId);
   });
 
+  // Deposit Funds (deposit write call on dynamic currentEscrowId)
+  const depositBtn = document.getElementById("btnDepositModal");
+  if (depositBtn) {
+    depositBtn.addEventListener("click", async () => {
+      const amountStr = prompt(`Enter deposit amount in Wei for Escrow #${currentEscrowId}:`, "1000");
+      if (amountStr && BigInt(amountStr) > 0n) {
+        await executeContractWrite("deposit", [currentEscrowId], `Depositing ${amountStr} WEI into Escrow #${currentEscrowId}...`, BigInt(amountStr));
+      }
+    });
+  }
+
   // 3. Approve Delivery (approve_delivery write call on dynamic currentEscrowId)
   document.getElementById("btnApproveDelivery").addEventListener("click", async () => {
     await executeContractWrite("approve_delivery", [currentEscrowId], `Approving delivery & releasing funds for Escrow #${currentEscrowId}...`);
@@ -444,16 +455,20 @@ function setupEventListeners() {
 }
 
 // Generic Contract Write Executor with dynamic ID
-async function executeContractWrite(functionName, args, statusMessage) {
+async function executeContractWrite(functionName, args, statusMessage, value = 0n) {
   await switchToBradburyNetwork();
   ensureAccountConfigured();
   try {
     showTxBanner(statusMessage);
-    const txHash = await client.writeContract({
+    const writeParams = {
       address: CONTRACT_ADDRESS,
       functionName: functionName,
       args: args
-    });
+    };
+    if (value > 0n) {
+      writeParams.value = value;
+    }
+    const txHash = await client.writeContract(writeParams);
 
     showTxBanner(`Submitted ${functionName}: ${txHash.substring(0, 16)}... Confirming...`, txHash);
     const receipt = await client.waitForTransactionReceipt({ hash: txHash });

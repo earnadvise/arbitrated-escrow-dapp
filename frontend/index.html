@@ -303,7 +303,11 @@
         </div>
 
         <!-- Live On-Chain Action Buttons -->
-        <div class="border-t border-slate-800 pt-6 grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div class="border-t border-slate-800 pt-6 grid grid-cols-1 sm:grid-cols-4 gap-3">
+          <button id="btnDepositModal" class="py-2.5 px-4 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-medium text-xs transition flex items-center justify-center gap-2 cursor-pointer">
+            <i data-lucide="arrow-down-circle" class="w-4 h-4"></i>
+            <span>Call `deposit`</span>
+          </button>
           <button id="btnApproveDelivery" class="py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-xs transition flex items-center justify-center gap-2 cursor-pointer">
             <i data-lucide="check-circle" class="w-4 h-4"></i>
             <span>Call `approve_delivery`</span>
