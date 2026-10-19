@@ -4,6 +4,15 @@ A comprehensive repository of production-grade, educational, and reusable GenLay
 
 ---
 
+> ### 📢 Revision 2 Live Update: Bradbury Deployment & Validator Timeout Resolution
+> - **Redeployed Contract (Bradbury Testnet):** [`0x92Fd227790835A5B9F2c8681B21c19Ab4db61D5a`](https://explorer-bradbury.genlayer.com/address/0x92Fd227790835A5B9F2c8681B21c19Ab4db61D5a)
+> - **Live Interactive DApp:** [https://genlayer-escrow-hub.vercel.app](https://genlayer-escrow-hub.vercel.app)
+> - **Resolved `LEADER_TIMEOUT`:** Web-scraped deliverable content (`gl.nondet.web.render`) is bounded to `[:1500]` characters, and agreement/dispute statements are bounded to `[:500]` characters with strict single-line `< 200` char LLM reasoning constraints.
+> - **Protected Response Window Protocol:** Live integration of `resolve_dispute_default` and `advance_dispute_window` eliminating deadlock risks when counterparties fail to submit defense statements.
+> - **Automated Test Suite:** 22/22 unit tests passing in `pytest`.
+
+---
+
 ## 📦 Intelligent Contract Primitives in this Repository
 
 ### 1. `AutonomousBountyOracle.py` — Decentralized Bug Bounty Triage & Settlement Primitive 🛡️
@@ -74,5 +83,6 @@ tests/test_parametric_insurance.py ....                                  [100%]
 ## 🔗 Live Deployment & Resources
 - **Project DApp Repository:** [https://github.com/earnadvise/arbitrated-escrow-dapp](https://github.com/earnadvise/arbitrated-escrow-dapp)
 - **Intelligent Contract Suite:** [https://github.com/earnadvise/genlayer-intelligent-escrow](https://github.com/earnadvise/genlayer-intelligent-escrow)
-- **Bradbury Contract:** `0x92Fd227790835A5B9F2c8681B21c19Ab4db61D5a`
-- **Live DApp:** [https://earnadvise.github.io/genlayer-escrow-dapp](https://earnadvise.github.io/genlayer-escrow-dapp)
+- **Bradbury Contract:** [`0x92Fd227790835A5B9F2c8681B21c19Ab4db61D5a`](https://explorer-bradbury.genlayer.com/address/0x92Fd227790835A5B9F2c8681B21c19Ab4db61D5a)
+- **Live Interactive DApp (Vercel):** [https://genlayer-escrow-hub.vercel.app](https://genlayer-escrow-hub.vercel.app)
+- **Bradbury Explorer:** [https://explorer-bradbury.genlayer.com/address/0x92Fd227790835A5B9F2c8681B21c19Ab4db61D5a](https://explorer-bradbury.genlayer.com/address/0x92Fd227790835A5B9F2c8681B21c19Ab4db61D5a)
